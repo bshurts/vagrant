@@ -33,8 +33,13 @@ module VagrantPlugins
         return addr if addr
 
         ssh_info = machine.ssh_info
-        raise Errors::WinRMNotReady if !ssh_info || ssh_info[:host].empty?
+        raise Errors::WinRMNotReady if winrm_invalid?(ssh_info)
         return ssh_info[:host]
+      end
+
+      def self.winrm_invalid?(ssh_info)
+        invalid = (!ssh_info || ssh_info[:host].empty? || ssh_info[:host].match(/^169.254/))
+        return invalid
       end
 
       # Returns the port to access WinRM.
