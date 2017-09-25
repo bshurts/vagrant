@@ -75,7 +75,7 @@ distribution's stable package manager, git tree-ish, daily ppa, or testing repos
 * `bootstrap_options` (string) - Additional command-line options to
   pass to the bootstrap script.
 
-* `version`  (string, default: "2015.5.2") - Version of minion to be installed. Only supported on Windows guest machines.
+* `version`  (string, default: "2016.11.3") - Version of minion to be installed. Only supported on Windows guest machines.
 
 ## Minion Options
 These only make sense when `no_minion` is `false`.
@@ -94,6 +94,8 @@ public key
 
 * `masterless`  (boolean) - Calls state.highstate in local mode. Uses `minion_id` and `pillar_data` when provided.
 
+* `salt_call_args` (array) - An array of additional command line flag arguments to be passed to the `salt-call` command when provisioning with masterless.
+
 ## Master Options
 These only make sense when `install_master` is `true`. Not supported on Windows guest machines.
 
@@ -106,6 +108,8 @@ These only make sense when `install_master` is `true`. Not supported on Windows 
 
 * `seed_master`  (dictionary) - Upload keys to master, thereby
 pre-seeding it before use. Example: `{minion_name:/path/to/key.pub}`
+
+* `salt_args` (array) - An array of additional command line flag arguments to be passed to the `salt` command when provisioning with masterless.
 
 ## Execute States
 
@@ -137,6 +141,9 @@ These may be used to control the output of state execution:
 * `log_level` (string) - The verbosity of the outputs. Defaults to "debug".
   Can be one of "all", "garbage", "trace", "debug", "info", or
   "warning". Requires `verbose` to be set to "true".
+
+* `verbose` (boolean) - The verbosity of the outputs. Defaults to "false".
+  Must be true for log_level taking effect and the output of the salt-commands being displayed.
 
 ## Pillar Data
 

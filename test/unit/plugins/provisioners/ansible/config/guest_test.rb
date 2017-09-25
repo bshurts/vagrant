@@ -16,7 +16,11 @@ describe VagrantPlugins::Ansible::Config::Guest do
   let(:existing_file) { "this/path/is/a/stub" }
 
   it "supports a list of options" do
-    supported_options = %w( config_file
+    supported_options = %w(
+                            become
+                            become_user
+                            compatibility_mode
+                            config_file
                             extra_vars
                             galaxy_command
                             galaxy_role_file
@@ -27,6 +31,7 @@ describe VagrantPlugins::Ansible::Config::Guest do
                             install_mode
                             inventory_path
                             limit
+                            pip_args
                             playbook
                             playbook_command
                             provisioning_path
@@ -39,7 +44,8 @@ describe VagrantPlugins::Ansible::Config::Guest do
                             tmp_path
                             vault_password_file
                             verbose
-                            version )
+                            version
+                          )
 
     expect(get_provisioner_option_names(described_class)).to eql(supported_options)
   end
@@ -50,11 +56,10 @@ describe VagrantPlugins::Ansible::Config::Guest do
     it "assigns default values to unset guest-specific options" do
       subject.finalize!
 
-      expect(subject.install).to be_true
+      expect(subject.install).to be(true)
       expect(subject.install_mode).to eql(:default)
       expect(subject.provisioning_path).to eql("/vagrant")
       expect(subject.tmp_path).to eql("/tmp/vagrant-ansible")
-      expect(subject.version).to be_empty
     end
   end
 
@@ -79,6 +84,14 @@ describe VagrantPlugins::Ansible::Config::Guest do
 
       result = subject.validate(machine)
       expect(subject.install_mode).to eql(:pip)
+    end
+
+    it "supports :pip_args_only install_mode" do
+      subject.install_mode = "pip_args_only"
+      subject.finalize!
+
+      result = subject.validate(machine)
+      expect(subject.install_mode).to eql(:pip_args_only)
     end
   end
 

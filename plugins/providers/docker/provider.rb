@@ -31,11 +31,13 @@ module VagrantPlugins
 
       # Returns the driver instance for this provider.
       def driver
-        return @driver if @driver
-        @driver = Driver.new
-
-        # If we are running on a host machine, then we set the executor
-        # to execute remotely.
+        if !@driver
+          if @machine.provider_config.compose
+            @driver = Driver::Compose.new(@machine)
+          else
+            @driver = Driver.new
+          end
+        end
         if host_vm?
           @driver.executor = Executor::Vagrant.new(host_vm)
         end
@@ -136,16 +138,29 @@ module VagrantPlugins
         # If the container isn't running, we can't SSH into it
         return nil if state.id != :running
 
-        network = driver.inspect_container(@machine.id)['NetworkSettings']
-        ip      = network['IPAddress']
+        port_name = "#{@machine.config.ssh.guest_port}/tcp"
+        network   = driver.inspect_container(@machine.id)['NetworkSettings']
+
+        if network["Ports"][port_name].respond_to?(:first)
+          port_info = network["Ports"][port_name].first
+        else
+          ip = network["IPAddress"]
+          port = @machine.config.ssh.guest_port
+          if !ip.to_s.empty?
+            port_info = {
+              "HostIp" => ip,
+              "HostPort" => port
+            }
+          end
+        end
 
         # If we were not able to identify the container's IP, we return nil
         # here and we let Vagrant core deal with it ;)
-        return nil if !ip
+        return nil if port_info.nil? || port_info.empty?
 
         {
-          host: ip,
-          port: @machine.config.ssh.guest_port
+          host: port_info['HostIp'],
+          port: port_info['HostPort']
         }
       end
 

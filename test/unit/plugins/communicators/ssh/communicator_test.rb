@@ -109,7 +109,7 @@ describe VagrantPlugins::CommunicatorSSH::Communicator do
   describe ".ready?" do
     before(&connection_setup)
     it "returns true if shell test is successful" do
-      expect(communicator.ready?).to be_true
+      expect(communicator.ready?).to be(true)
     end
 
     context "with an invalid shell test" do
@@ -132,7 +132,7 @@ describe VagrantPlugins::CommunicatorSSH::Communicator do
 
     it "prepends UUID output to command for garbage removal" do
       expect(command_channel).to receive(:send_data).
-        with("printf '#{command_garbage_marker}'\nls /\n")
+        with("printf '#{command_garbage_marker}'\n(>&2 printf '#{command_garbage_marker}')\nls /\n")
       expect(communicator.execute("ls /")).to eq(0)
     end
 
@@ -159,10 +159,66 @@ describe VagrantPlugins::CommunicatorSSH::Communicator do
         stdout = ''
         expect(
           communicator.execute("ls /") do |type, data|
-            stdout << data
+            if type == :stdout
+              stdout << data
+            end
           end
         ).to eq(0)
         expect(stdout).to eq("bin\ntmp\n")
+      end
+    end
+
+    context "with no command output" do
+      let(:command_stdout_data) do
+        "#{command_garbage_marker}"
+      end
+
+      it "does not send empty stdout data string" do
+        empty = true
+        expect(
+          communicator.execute("ls /") do |type, data|
+            if type == :stdout && data.empty?
+              empty = false
+            end
+          end
+        ).to eq(0)
+        expect(empty).to be(true)
+      end
+    end
+
+    context "with garbage content prepended to command stderr output" do
+      let(:command_stderr_data) do
+        "Line of garbage\nMore garbage\n#{command_garbage_marker}bin\ntmp\n"
+      end
+
+      it "removes any garbage output prepended to command stderr output" do
+        stderr = ''
+        expect(
+          communicator.execute("ls /") do |type, data|
+            if type == :stderr
+              stderr << data
+            end
+          end
+        ).to eq(0)
+        expect(stderr).to eq("bin\ntmp\n")
+      end
+    end
+
+    context "with no command output on stderr" do
+      let(:command_stderr_data) do
+        "#{command_garbage_marker}"
+      end
+
+      it "does not send empty stderr data string" do
+        empty = true
+        expect(
+          communicator.execute("ls /") do |type, data|
+            if type == :stderr && data.empty?
+              empty = false
+            end
+          end
+        ).to eq(0)
+        expect(empty).to be(true)
       end
     end
 
@@ -212,7 +268,7 @@ describe VagrantPlugins::CommunicatorSSH::Communicator do
     before(&connection_setup)
     context "with exit code as zero" do
       it "returns true" do
-        expect(communicator.test("ls")).to be_true
+        expect(communicator.test("ls")).to be(true)
       end
     end
 
@@ -222,7 +278,7 @@ describe VagrantPlugins::CommunicatorSSH::Communicator do
       end
 
       it "returns false" do
-        expect(communicator.test("/bin/false")).to be_false
+        expect(communicator.test("/bin/false")).to be(false)
       end
     end
   end
@@ -336,6 +392,20 @@ describe VagrantPlugins::CommunicatorSSH::Communicator do
         expect(Net::SSH).to receive(:start).with(
           nil, nil, hash_including(
             auth_methods: ["none", "hostbased"]
+          )
+        ).and_return(true)
+        communicator.send(:connect)
+      end
+
+      it "includes the default cipher array for encryption" do
+        cipher_array = %w(aes128-cbc 3des-cbc blowfish-cbc cast128-cbc
+                         aes192-cbc aes256-cbc rijndael-cbc@lysator.liu.se
+                         idea-cbc arcfour128 arcfour256 arcfour
+                         aes128-ctr aes192-ctr aes256-ctr
+                         cast128-ctr blowfish-ctr 3des-ctr none)
+        expect(Net::SSH).to receive(:start).with(
+          nil, nil, hash_including(
+            encryption: cipher_array
           )
         ).and_return(true)
         communicator.send(:connect)
@@ -515,14 +585,14 @@ describe VagrantPlugins::CommunicatorSSH::Communicator do
 
   describe ".generate_environment_export" do
     it "should generate bourne shell compatible export" do
-      communicator.send(:generate_environment_export, "TEST", "value").should eq("export TEST=\"value\"\n")
+      expect(communicator.send(:generate_environment_export, "TEST", "value")).to eq("export TEST=\"value\"\n")
     end
 
     context "with custom template defined" do
       let(:export_command_template){ "setenv %ENV_KEY% %ENV_VALUE%" }
 
       it "should generate custom export based on template" do
-        communicator.send(:generate_environment_export, "TEST", "value").should eq("setenv TEST value\n")
+        expect(communicator.send(:generate_environment_export, "TEST", "value")).to eq("setenv TEST value\n")
       end
     end
   end

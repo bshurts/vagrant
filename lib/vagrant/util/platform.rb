@@ -3,6 +3,8 @@ require "shellwords"
 require "tmpdir"
 
 require "vagrant/util/subprocess"
+require "vagrant/util/powershell"
+require "vagrant/util/which"
 
 module Vagrant
   module Util
@@ -10,21 +12,38 @@ module Vagrant
     class Platform
       class << self
         def cygwin?
-          return @_cygwin if defined?(@_cygwin)
-          @_cygwin = -> {
-            # Installer detects Cygwin
-            return true if ENV["VAGRANT_DETECTED_OS"] &&
-              ENV["VAGRANT_DETECTED_OS"].downcase.include?("cygwin")
+          if !defined?(@_cygwin)
+            @_cygwin = ENV["VAGRANT_DETECTED_OS"].to_s.downcase.include?("cygwin") ||
+              platform.include?("cygwin") ||
+              ENV["OSTYPE"].to_s.downcase.include?("cygwin")
+          end
+          @_cygwin
+        end
 
-            # Ruby running in Cygwin
-            return true if platform.include?("cygwin")
+        def msys?
+          if !defined?(@_msys)
+            @_msys = ENV["VAGRANT_DETECTED_OS"].to_s.downcase.include?("msys") ||
+              platform.include?("msys") ||
+              ENV["OSTYPE"].to_s.downcase.include?("msys")
+          end
+          @_msys
+        end
 
-            # Heuristic. If the path contains Cygwin, we just assume we're
-            # in Cygwin. It is generally a safe bet.
-            path = ENV["PATH"] || ""
-            return path.include?("cygwin")
-          }.call
-          return @_cygwin
+        def wsl?
+          if !defined?(@_wsl)
+            @_wsl = false
+            SilenceWarnings.silence! do
+              # Use PATH values to check for `/mnt/c` path indicative of WSL
+              if ENV.fetch("PATH", "").downcase.include?("/mnt/c")
+                # Validate WSL via uname output
+                uname = Subprocess.execute("uname", "-r")
+                if uname.exit_code == 0 && uname.stdout.downcase.include?("microsoft")
+                  @_wsl = true
+                end
+              end
+            end
+          end
+          @_wsl
         end
 
         [:darwin, :bsd, :freebsd, :linux, :solaris].each do |type|
@@ -42,27 +61,17 @@ module Vagrant
         # Checks if the user running Vagrant on Windows has administrative
         # privileges.
         #
+        # From: https://support.microsoft.com/en-us/kb/243330
+        # SID: S-1-5-19
+        #
         # @return [Boolean]
         def windows_admin?
           return @_windows_admin if defined?(@_windows_admin)
 
-          # We lazily-load this because it is only available on Windows
-          require "win32/registry"
-
-          # Verify that we have administrative privileges. The odd method of
-          # detecting this is based on this StackOverflow question:
-          #
-          # https://stackoverflow.com/questions/560366/
-          #   detect-if-running-with-administrator-privileges-under-windows-xp
           @_windows_admin = -> {
-            begin
-              Win32::Registry::HKEY_USERS.open("S-1-5-19") {}
-
-              # The above doesn't seem to be 100% bullet proof. See GH-5616.
-              return (`reg query HKU\\S-1-5-19 2>&1` =~ /ERROR/).nil?
-            rescue Win32::Registry::Error
-              return false
-            end
+            ps_cmd = '(new-object System.Security.Principal.WindowsPrincipal([System.Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)'
+            output = Vagrant::Util::PowerShell.execute_cmd(ps_cmd)
+            return output == 'True'
           }.call
 
           return @_windows_admin
@@ -78,15 +87,13 @@ module Vagrant
         # @return [Boolean]
         def windows_hyperv_admin?
           return @_windows_hyperv_admin if defined?(@_windows_hyperv_admin)
+
           @_windows_hyperv_admin = -> {
-            begin
-              username = ENV["USERNAME"]
-              process = Subprocess.execute("net", "localgroup", "Hyper-V Administrators")
-              return process.stdout.include?(username)
-            rescue Errors::CommandUnavailableWindows
-              return false
-            end
+            ps_cmd = "[System.Security.Principal.WindowsIdentity]::GetCurrent().Groups | ForEach-Object { if ($_.Value -eq 'S-1-5-32-578'){ Write-Host 'true'; break }}"
+            output = Vagrant::Util::PowerShell.execute_cmd(ps_cmd)
+            return output == 'true'
           }.call
+
           return @_windows_hyperv_admin
         end
 
@@ -96,24 +103,35 @@ module Vagrant
         # @param [String] path
         # @return [String]
         def cygwin_path(path)
-          if cygwin?
-            begin
-              # First try the real cygpath
-              process = Subprocess.execute("cygpath", "-u", "-a", path.to_s)
-              return process.stdout.chomp
-            rescue Errors::CommandUnavailableWindows
-            end
+          begin
+            # We have to revert to the old env
+            # path here, otherwise it looks like
+            # msys2 ends up using the wrong cygpath
+            # binary and ends up with a `/cygdrive`
+            # when it doesn't exist in msys2
+            original_path_env = ENV['PATH']
+            ENV['PATH'] = ENV['VAGRANT_OLD_ENV_PATH']
+            cygpath = Vagrant::Util::Which.which("cygpath")
+            cygpath.gsub!("/", '\\')
+            process = Subprocess.execute(
+              cygpath, "-u", "-a", path.to_s)
+            return process.stdout.chomp
+          rescue Errors::CommandUnavailableWindows => e
+            # Sometimes cygpath isn't available (msys). Instead, do what we
+            # can with bash tricks.
+            process = Subprocess.execute(
+              "bash",
+              "--noprofile",
+              "--norc",
+              "-c", "cd #{Shellwords.escape(path)} && pwd")
+            return process.stdout.chomp
+          ensure
+            ENV['PATH'] = original_path_env
           end
-
-          # Sometimes cygpath isn't available (msys). Instead, do what we
-          # can with bash tricks.
-          process = Subprocess.execute(
-            "bash",
-            "--noprofile",
-            "--norc",
-            "-c", "cd #{Shellwords.escape(path)} && pwd")
-          return process.stdout.chomp
         end
+
+        # Identical to cygwin_path for now
+        alias_method :msys_path, :cygwin_path
 
         # This takes any path and converts it to a full-length Windows
         # path on Windows machines in Cygwin.
@@ -199,11 +217,16 @@ module Vagrant
         def windows_unc_path(path)
           path = path.gsub("/", "\\")
 
-          # If the path is just a drive letter, then return that as-is
-          return path + "\\" if path =~ /^[a-zA-Z]:\\?$/
-
           # Convert to UNC path
-          "\\\\?\\" + path.gsub("/", "\\")
+          if path =~ /^[a-zA-Z]:\\?$/
+            # If the path is just a drive letter, then return that as-is
+            path + "\\"
+          elsif path.start_with?("\\\\")
+            # If the path already starts with `\\` assume UNC and return as-is
+            path
+          else
+            "\\\\?\\" + path.gsub("/", "\\")
+          end
         end
 
         # Returns a boolean noting whether the terminal supports color.
@@ -227,6 +250,215 @@ module Vagrant
           return @_platform if defined?(@_platform)
           @_platform = RbConfig::CONFIG["host_os"].downcase
           return @_platform
+        end
+
+        # Determine if given path is within the WSL rootfs. Returns
+        # true if within the subsystem, or false if outside the subsystem.
+        #
+        # @param [String] path Path to check
+        # @return [Boolean] path is within subsystem
+        def wsl_path?(path)
+          wsl? && !path.to_s.downcase.start_with?("/mnt/")
+        end
+
+        # Convert a WSL path to the local Windows path. This is useful
+        # for conversion when calling out to Windows executables from
+        # the WSL
+        #
+        # @param [String, Pathname] path Path to convert
+        # @return [String]
+        def wsl_to_windows_path(path)
+          if wsl? && wsl_windows_access?
+            if wsl_path?(path)
+              parts = path.split("/")
+              parts.delete_if(&:empty?)
+              [wsl_windows_appdata_local, "lxss", *parts].join("\\")
+            else
+              path = path.to_s.sub("/mnt/", "")
+              parts = path.split("/")
+              parts.first << ":"
+              path = parts.join("\\")
+              path
+            end
+          else
+            path
+          end
+        end
+
+        # Takes a windows path and formats it to the
+        # 'unix' style (i.e. `/cygdrive/c` or `/c/`)
+        #
+        # @param [Pathname, String] path Path to convert
+        # @param [Hash] hash of arguments
+        # @return [String]
+        def format_windows_path(path, *args)
+          path = cygwin_path(path) if cygwin?
+          path = msys_path(path) if msys?
+          path = wsl_to_windows_path(path) if wsl?
+          if windows? || wsl?
+            path = windows_unc_path(path) if !args.include?(:disable_unc)
+          end
+
+          path
+        end
+
+        # Automatically convert a given path to a Windows path. Will only
+        # be applied if running on a Windows host. If running on Windows
+        # host within the WSL, the actual Windows path will be returned.
+        #
+        # @param [Pathname, String] path Path to convert
+        # @return [String]
+        def windows_path(path)
+          path = cygwin_windows_path(path)
+          path = wsl_to_windows_path(path)
+          if windows? || wsl?
+            path = windows_unc_path(path)
+          end
+          path
+        end
+
+        # Allow Vagrant to access Vagrant managed machines outside the
+        # Windows Subsystem for Linux
+        #
+        # @return [Boolean]
+        def wsl_windows_access?
+          if !defined?(@_wsl_windows_access)
+            @_wsl_windows_access = wsl? && ENV["VAGRANT_WSL_ENABLE_WINDOWS_ACCESS"]
+          end
+          @_wsl_windows_access
+        end
+
+        # The allowed windows system path Vagrant can manage from the Windows
+        # Subsystem for Linux
+        #
+        # @return [Pathname]
+        def wsl_windows_accessible_path
+          if !defined?(@_wsl_windows_accessible_path)
+            access_path = ENV["VAGRANT_WSL_WINDOWS_ACCESS_USER_HOME_PATH"]
+            if access_path.to_s.empty?
+              access_path = wsl_windows_home.gsub("\\", "/").sub(":", "")
+              access_path[0] = access_path[0].downcase
+              access_path = "/mnt/#{access_path}"
+            end
+            @_wsl_windows_accessible_path = Pathname.new(access_path)
+          end
+          @_wsl_windows_accessible_path
+        end
+
+        # Checks given path to determine if Vagrant is allowed to bypass checks
+        #
+        # @param [String] path Path to check
+        # @return [Boolean] Vagrant is allowed to bypass checks
+        def wsl_windows_access_bypass?(path)
+          wsl? && wsl_windows_access? &&
+            path.to_s.start_with?(wsl_windows_accessible_path.to_s)
+        end
+
+        # If running within the Windows Subsystem for Linux, this will provide
+        # simple setup to allow sharing of the user's VAGRANT_HOME directory
+        # within the subsystem
+        #
+        # @param [Environment] env
+        # @param [Logger] logger Optional logger to display information
+        def wsl_init(env, logger=nil)
+          if wsl?
+            if ENV["VAGRANT_WSL_ENABLE_WINDOWS_ACCESS"]
+              wsl_validate_matching_vagrant_versions!
+              shared_user = ENV["VAGRANT_WSL_WINDOWS_ACCESS_USER"]
+              if shared_user.to_s.empty?
+                shared_user = wsl_windows_username
+              end
+              if logger
+                logger.warn("Windows Subsystem for Linux detected. Allowing access to user: #{shared_user}")
+                logger.warn("Vagrant will be allowed to control Vagrant managed machines within the user's home path.")
+              end
+              if ENV["VAGRANT_HOME"] || ENV["VAGRANT_WSL_DISABLE_VAGRANT_HOME"]
+                logger.warn("VAGRANT_HOME environment variable already set. Not overriding!") if logger
+              else
+                home_path = wsl_windows_accessible_path.to_s
+                ENV["VAGRANT_HOME"] = File.join(home_path, ".vagrant.d")
+                if logger
+                  logger.info("Overriding VAGRANT_HOME environment variable to configured windows user. (#{ENV["VAGRANT_HOME"]})")
+                end
+                true
+              end
+            else
+              if env.local_data_path.to_s.start_with?("/mnt/")
+                raise Vagrant::Errors::WSLVagrantAccessError
+              end
+            end
+          end
+        end
+
+        # Fetch the Windows username currently in use
+        #
+        # @return [String, Nil]
+        def wsl_windows_username
+          if !@_wsl_windows_username
+            result = Util::Subprocess.execute("cmd.exe", "/c", "echo %USERNAME%")
+            if result.exit_code == 0
+              @_wsl_windows_username = result.stdout.strip
+            end
+          end
+          @_wsl_windows_username
+        end
+
+        # Fetch the Windows user home directory
+        #
+        # @return [String, Nil]
+        def wsl_windows_home
+          if !@_wsl_windows_home
+            result = Util::Subprocess.execute("cmd.exe", "/c" "echo %USERPROFILE%")
+            if result.exit_code == 0
+              @_wsl_windows_home = result.stdout.gsub("\"", "").strip
+            end
+          end
+          @_wsl_windows_home
+        end
+
+        # Fetch the Windows user local app data directory
+        #
+        # @return [String, Nil]
+        def wsl_windows_appdata_local
+          if !@_wsl_windows_appdata_local
+            result = Util::Subprocess.execute("cmd.exe", "/c", "echo %LOCALAPPDATA%")
+            if result.exit_code == 0
+              @_wsl_windows_appdata_local = result.stdout.gsub("\"", "").strip
+            end
+          end
+          @_wsl_windows_appdata_local
+        end
+
+        # Confirm Vagrant versions installed within the WSL and the Windows system
+        # are the same. Raise error if they do not match.
+        def wsl_validate_matching_vagrant_versions!
+          valid = false
+          result = Util::Subprocess.execute("vagrant.exe", "version")
+          if result.exit_code == 0
+            windows_version = result.stdout.match(/Installed Version: (?<version>[\w.-]+)/)
+            if windows_version
+              windows_version = windows_version[:version].strip
+              valid = windows_version == Vagrant::VERSION
+            end
+          end
+          if !valid
+            raise Vagrant::Errors::WSLVagrantVersionMismatch,
+              wsl_version: Vagrant::VERSION,
+              windows_version: windows_version || "unknown"
+          end
+        end
+
+        # systemd is in use
+        def systemd?
+          if !defined?(@_systemd)
+            if !windows?
+              result = Vagrant::Util::Subprocess.execute("ps", "-o", "comm=", "1")
+              @_systemd = result.stdout.chomp == "systemd"
+            else
+              @_systemd = false
+            end
+          end
+          @_systemd
         end
 
         # @private

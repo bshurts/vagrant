@@ -32,6 +32,18 @@ Vagrant to use this provider for any _new_ Vagrant environments. Existing
 Vagrant environments will continue to use the provider they came `up` with.
 Once you `vagrant destroy` existing environments, this will take effect.
 
+## `VAGRANT_PREFERRED_PROVIDERS`
+
+This configures providers that Vagrant should prefer.
+
+Much like the `VAGRANT_DEFAULT_PROVIDER` this environment variable normally
+does not need to be set. By setting this you will instruct Vagrant to
+_prefer_ providers defined in this environment variable for any _new_
+Vagrant environments. Existing Vagrant environments will continue to use
+the provider they came `up` with. Once you `vagrant destroy` existing environments,
+this will take effect. A single provider can be defined within this environment
+variable or a comma delimited list of providers.
+
 ## `VAGRANT_BOX_UPDATE_CHECK_DISABLE`
 
 By default, Vagrant will query the metadata API server to see if a newer
@@ -46,7 +58,7 @@ This option will not affect global box functions like `vagrant box update`.
 
 Vagrant does occasional network calls to check whether the version of Vagrant
 that is running locally is up to date. We understand that software making remote
-calls over the internet for any reason can be undesirable. To surpress these
+calls over the internet for any reason can be undesirable. To suppress these
 calls, set the environment variable `VAGRANT_CHECKPOINT_DISABLE` to any
 non-empty value.
 
@@ -66,7 +78,14 @@ a scripting environment in order to set the directory that Vagrant sees.
 
 ## `VAGRANT_DOTFILE_PATH`
 
-`VAGRANT_DOTFILE_PATH` can be set to change the directory where Vagrant stores VM-specific state, such as the VirtualBox VM UUID. By default, this is set to `.vagrant`. If you keep your Vagrantfile in a Dropbox folder in order to share the folder between your desktop and laptop (for example), Vagrant will overwrite the files in this directory with the details of the VM on the most recently-used host. To avoid this, you could set `VAGRANT_DOTFILE_PATH` to `.vagrant-laptop` and `.vagrant-desktop` on the respective machines. (Remember to update your `.gitignore`!)
+`VAGRANT_DOTFILE_PATH` can be set to change the directory where Vagrant stores
+VM-specific state, such as the VirtualBox VM UUID. By default, this is set to
+`.vagrant`. If you keep your Vagrantfile in a Dropbox folder in order to share
+the folder between your desktop and laptop (for example), Vagrant will overwrite
+the files in this directory with the details of the VM on the most recently-used
+host. To avoid this, you could set `VAGRANT_DOTFILE_PATH` to `.vagrant-laptop`
+and `.vagrant-desktop` on the respective machines. (Remember to update your
+`.gitignore`!)
 
 ## `VAGRANT_HOME`
 
@@ -128,10 +147,47 @@ Note that any `vagrant plugin` commands automatically do not load any
 plugins, so if you do install any unstable plugins, you can always use
 the `vagrant plugin` commands without having to worry.
 
+## `VAGRANT_ALLOW_PLUGIN_SOURCE_ERRORS`
+
+If this is set to any value, then Vagrant will not error when a configured
+plugin source is unavailable. When installing a Vagrant plugin Vagrant
+will error and halt if a plugin source is inaccessible. In some cases it
+may be desirable to ignore inaccessible sources and continue with the
+plugin installation. Enabling this value will cause Vagrant to simply log
+the plugin source error and continue.
+
 ## `VAGRANT_NO_PARALLEL`
 
 If this is set, Vagrant will not perform any parallel operations (such as
 parallel box provisioning). All operations will be performed in serial.
+
+## `VAGRANT_DETECTED_OS`
+
+This environment variable may be set by the Vagrant launcher to help determine
+the current runtime platform. In general Vagrant will set this value when running
+on a Windows host using a cygwin or msys based shell. If this value is set, the
+Vagrant launcher will not modify it.
+
+## `VAGRANT_DETECTED_ARCH`
+
+This environment variable may be set by the Vagrant launcher to help determine
+the current runtime architecture in use. In general Vagrant will set this value
+when running on a Windows host using a cygwin or msys based shell. The value
+the Vagrant launcher may set in this environment variable will not always match
+the actual architecture of the platform itself. Instead it signifies the detected
+architecture of the environment it is running within. If this value is set, the
+Vagrant launcher will not modify it.
+
+## `VAGRANT_WINPTY_DISABLE`
+
+If this is set, Vagrant will _not_ wrap interactive processes with winpty where
+required.
+
+## `VAGRANT_PREFER_SYSTEM_BIN`
+
+If this is set, Vagrant will prefer using utility executables (like `ssh` and `rsync`)
+from the local system instead of those vendored within the Vagrant installation.
+This currently only applies to Windows systems.
 
 ## `VAGRANT_SKIP_SUBPROCESS_JAILBREAK`
 
@@ -149,7 +205,7 @@ jailbreak by setting `VAGRANT_SKIP_SUBPROCESS_JAILBREAK`.
 ## `VAGRANT_VAGRANTFILE`
 
 This specifies the filename of the Vagrantfile that Vagrant searches for.
-By default, this is "Vagrantfile." Note that this is _not_ a file path,
+By default, this is "Vagrantfile". Note that this is _not_ a file path,
 but just a filename.
 
 This environmental variable is commonly used in scripting environments

@@ -6,11 +6,12 @@ Param(
 
     [string]$switchname=$null,
     [string]$memory=$null,
-    [string]$maxmemory=$null,   
+    [string]$maxmemory=$null,
     [string]$cpus=$null,
     [string]$vmname=$null,
     [string]$auto_start_action=$null,
-    [string]$auto_stop_action=$null
+    [string]$auto_stop_action=$null,
+    [string]$enable_virtualization_extensions=$False
 )
 
 # Include the following modules
@@ -162,12 +163,17 @@ $controllers = Select-Xml -xml $vmconfig -xpath "//*[starts-with(name(.),'contro
 
 # Only set EFI secure boot for Gen 2 machines, not gen 1
 if ($generation -ne 1) {
-    # Set EFI secure boot 
+    # Set EFI secure boot
     if ($secure_boot_enabled -eq "True") {
         Set-VMFirmware -VM $vm -EnableSecureBoot On
     }  else {
         Set-VMFirmware -VM $vm -EnableSecureBoot Off
     }
+}
+
+# Enable nested virtualization if configured
+if ($enable_virtualization_extensions -eq "True") {
+    Set-VMProcessor -VM $vm -ExposeVirtualizationExtensions $true
 }
 
 # A regular expression pattern to pull the number from controllers

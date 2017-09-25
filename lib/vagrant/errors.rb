@@ -292,6 +292,10 @@ module Vagrant
       error_key(:clone_machine_not_found)
     end
 
+    class CommandDeprecated < VagrantError
+      error_key(:command_deprecated)
+    end
+
     class CommandUnavailable < VagrantError
       error_key(:command_unavailable)
     end
@@ -456,8 +460,16 @@ module Vagrant
       error_key(:network_type_not_supported)
     end
 
+    class NetworkManagerNotInstalled < VagrantError
+      error_key(:network_manager_not_installed)
+    end
+
     class NFSBadExports < VagrantError
       error_key(:nfs_bad_exports)
+    end
+
+    class NFSDupePerms < VagrantError
+      error_key(:nfs_dupe_permissions)
     end
 
     class NFSExportsFailed < VagrantError
@@ -528,6 +540,14 @@ module Vagrant
       error_key(:requires_directory, "vagrant.actions.general.package")
     end
 
+    class PowerShellNotFound < VagrantError
+      error_key(:powershell_not_found)
+    end
+
+    class PowerShellInvalidVersion < VagrantError
+      error_key(:powershell_invalid_version)
+    end
+
     class ProviderCantInstall < VagrantError
       error_key(:provider_cant_install)
     end
@@ -592,6 +612,10 @@ module Vagrant
       error_key(:plugin_init_error)
     end
 
+    class PluginSourceError < VagrantError
+      error_key(:plugin_source_error)
+    end
+
     class PushesNotDefined < VagrantError
       error_key(:pushes_not_defined)
     end
@@ -640,6 +664,18 @@ module Vagrant
       error_key(:shell_expand_failed)
     end
 
+    class SnapshotConflictFailed < VagrantError
+      error_key(:snapshot_force)
+    end
+
+    class SnapshotNotFound < VagrantError
+      error_key(:snapshot_not_found)
+    end
+
+    class SnapshotNotSupported < VagrantError
+      error_key(:snapshot_not_supported)
+    end
+
     class SSHAuthenticationFailed < VagrantError
       error_key(:ssh_authentication_failed)
     end
@@ -654,6 +690,10 @@ module Vagrant
 
     class SSHConnectionRefused < VagrantError
       error_key(:ssh_connection_refused)
+    end
+
+    class SSHConnectionAborted < VagrantError
+      error_key(:ssh_connection_aborted)
     end
 
     class SSHConnectionReset < VagrantError
@@ -764,6 +804,10 @@ module Vagrant
       error_key(:vboxmanage_not_found_error)
     end
 
+    class VBoxManageNotFoundWSLError < VagrantError
+      error_key(:vboxmanage_not_found_wsl_error)
+    end
+
     class VirtualBoxBrokenVersion040214 < VagrantError
       error_key(:virtualbox_broken_version_040214)
     end
@@ -870,6 +914,18 @@ module Vagrant
 
     class VMPowerOffToPackage < VagrantError
       error_key(:power_off, "vagrant.actions.vm.export")
+    end
+
+    class WSLVagrantVersionMismatch < VagrantError
+      error_key(:wsl_vagrant_version_mismatch)
+    end
+
+    class WSLVagrantAccessError < VagrantError
+      error_key(:wsl_vagrant_access_error)
+    end
+
+    class WSLVirtualBoxWindowsAccessError < VagrantError
+      error_key(:wsl_virtualbox_windows_access)
     end
   end
 end

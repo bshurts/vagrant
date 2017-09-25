@@ -18,25 +18,25 @@ describe Vagrant do
   describe "#in_installer?" do
     it "is not if env is not set" do
       with_temp_env("VAGRANT_INSTALLER_ENV" => nil) do
-        expect(subject.in_installer?).to be_false
+        expect(subject.in_installer?).to be(false)
       end
     end
 
     it "is if env is set" do
       with_temp_env("VAGRANT_INSTALLER_ENV" => "/foo") do
-        expect(subject.in_installer?).to be_true
+        expect(subject.in_installer?).to be(true)
       end
     end
   end
 
   describe "#installer_embedded_dir" do
     it "returns nil if not in an installer" do
-      Vagrant.stub(in_installer?: false)
+      allow(Vagrant).to receive(:in_installer?).and_return(false)
       expect(subject.installer_embedded_dir).to be_nil
     end
 
     it "returns the set directory" do
-      Vagrant.stub(in_installer?: true)
+      allow(Vagrant).to receive(:in_installer?).and_return(true)
 
       with_temp_env("VAGRANT_INSTALLER_EMBEDDED_DIR" => "/foo") do
         expect(subject.installer_embedded_dir).to eq("/foo")
@@ -47,13 +47,13 @@ describe Vagrant do
   describe "#plugins_enabled?" do
     it "returns true if the env is not set" do
       with_temp_env("VAGRANT_NO_PLUGINS" => nil) do
-        expect(subject.plugins_enabled?).to be_true
+        expect(subject.plugins_enabled?).to be(true)
       end
     end
 
     it "returns false if the env is set" do
       with_temp_env("VAGRANT_NO_PLUGINS" => "1") do
-        expect(subject.plugins_enabled?).to be_false
+        expect(subject.plugins_enabled?).to be(false)
       end
     end
   end
@@ -129,6 +129,18 @@ describe Vagrant do
         expected = Pathname.new("/foo").expand_path
         expect(subject.user_data_path).to eql(expected)
       end
+    end
+  end
+
+  describe "#prerelease?" do
+    it "should return true when Vagrant version is development" do
+      stub_const("Vagrant::VERSION", "1.0.0.dev")
+      expect(subject.prerelease?).to be(true)
+    end
+
+    it "should return false when Vagrant version is release" do
+      stub_const("Vagrant::VERSION", "1.0.0")
+      expect(subject.prerelease?).to be(false)
     end
   end
 end

@@ -170,6 +170,8 @@ module Vagrant
       # Extra env keys are the remaining opts
       extra_env = opts.dup
 
+      check_cwd # Warns the UI if the machine was last used on a different dir
+
       # Create a deterministic ID for this machine
       vf = nil
       vf = @env.vagrantfile_name[0] if @env.vagrantfile_name
@@ -438,6 +440,9 @@ module Vagrant
       info[:keys_only] ||= @config.ssh.default.keys_only
       info[:paranoid] ||= @config.ssh.default.paranoid
       info[:username] ||= @config.ssh.default.username
+      info[:compression] ||= @config.ssh.default.compression
+      info[:dsa_authentication] ||= @config.ssh.default.dsa_authentication
+      info[:extra_args] ||= @config.ssh.default.extra_args
 
       # We set overrides if they are set. These take precedence over
       # provider-returned data.
@@ -445,8 +450,11 @@ module Vagrant
       info[:port] = @config.ssh.port if @config.ssh.port
       info[:keys_only] = @config.ssh.keys_only
       info[:paranoid] = @config.ssh.paranoid
+      info[:compression] = @config.ssh.compression
+      info[:dsa_authentication] = @config.ssh.dsa_authentication
       info[:username] = @config.ssh.username if @config.ssh.username
       info[:password] = @config.ssh.password if @config.ssh.password
+      info[:extra_args] = @config.ssh.extra_args if @config.ssh.extra_args
 
       # We also set some fields that are purely controlled by Varant
       info[:forward_agent] = @config.ssh.forward_agent
@@ -558,6 +566,32 @@ module Vagrant
     def uid_file
       return nil if !@data_dir
       @data_dir.join("creator_uid")
+    end
+
+    # Checks the current directory for a given machine
+    # and displays a warning if that machine has moved
+    # from its previous location on disk. If the machine
+    # has moved, it prints a warning to the user.
+    def check_cwd
+      desired_encoding = @env.root_path.to_s.encoding
+      vagrant_cwd_filepath = @data_dir.join('vagrant_cwd')
+      vagrant_cwd = if File.exist?(vagrant_cwd_filepath)
+                      File.read(vagrant_cwd_filepath,
+                        external_encoding: desired_encoding
+                      ).chomp
+                    end
+
+      if vagrant_cwd != @env.root_path.to_s
+        if vagrant_cwd
+          ui.warn(I18n.t(
+            'vagrant.moved_cwd',
+            old_wd:     "#{vagrant_cwd}",
+            current_wd: "#{@env.root_path.to_s}"))
+        end
+        File.write(vagrant_cwd_filepath, @env.root_path.to_s,
+          external_encoding: desired_encoding
+        )
+      end
     end
   end
 end

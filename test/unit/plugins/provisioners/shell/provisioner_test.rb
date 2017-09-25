@@ -7,8 +7,8 @@ describe "Vagrant::Shell::Provisioner" do
   let(:env){ isolated_environment }
   let(:machine) {
     double(:machine, env: env, id: "ID").tap { |machine|
-      machine.stub_chain(:config, :vm, :communicator).and_return(:not_winrm)
-      machine.stub_chain(:communicate, :tap) {}
+      allow(machine).to receive_message_chain(:config, :vm, :communicator).and_return(:not_winrm)
+      allow(machine).to receive_message_chain(:communicate, :tap) {}
     }
   }
 
@@ -43,6 +43,37 @@ describe "Vagrant::Shell::Provisioner" do
     end
   end
 
+  context "with a script that was set to freeze the string" do
+    TEST_CONSTANT_VARIABLE = <<-TEST_CONSTANT_VARIABLE.freeze
+      echo test
+    TEST_CONSTANT_VARIABLE
+
+    let(:script) { TEST_CONSTANT_VARIABLE }
+    let(:config) {
+      double(
+        :config,
+        :args        => "doesn't matter",
+        :env         => {},
+        :upload_path => "arbitrary",
+        :remote?     => false,
+        :path        => nil,
+        :inline      => script,
+        :binary      => false,
+      )
+    }
+
+    it "does not raise an exception" do
+      vsp = VagrantPlugins::Shell::Provisioner.new(machine, config)
+
+      RSpec::Expectations.configuration.on_potential_false_positives = :nothing
+      # This test should be fine, since we are specifically looking for the
+      # string 'freeze' when RuntimeError is raised
+      expect {
+        vsp.provision
+      }.not_to raise_error(RuntimeError)
+    end
+  end
+
   context "with remote script" do
 
     context "that does not have matching sha1 checksum" do
@@ -62,7 +93,7 @@ describe "Vagrant::Shell::Provisioner" do
 
       let(:digest){ double("digest") }
       before do
-        Vagrant::Util::Downloader.any_instance.should_receive(:execute_curl).and_return(true)
+        allow_any_instance_of(Vagrant::Util::Downloader).to receive(:execute_curl).and_return(true)
         allow(digest).to receive(:file).and_return(digest)
         expect(Digest::SHA1).to receive(:new).and_return(digest)
         expect(digest).to receive(:hexdigest).and_return('INVALID_VALUE')
@@ -92,7 +123,7 @@ describe "Vagrant::Shell::Provisioner" do
 
       let(:digest){ double("digest") }
       before do
-        Vagrant::Util::Downloader.any_instance.should_receive(:execute_curl).and_return(true)
+        allow_any_instance_of(Vagrant::Util::Downloader).to receive(:execute_curl).and_return(true)
         allow(digest).to receive(:file).and_return(digest)
         expect(Digest::MD5).to receive(:new).and_return(digest)
         expect(digest).to receive(:hexdigest).and_return('INVALID_VALUE')

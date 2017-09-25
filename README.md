@@ -1,7 +1,7 @@
 # Vagrant
 
 * Website: [https://www.vagrantup.com/](https://www.vagrantup.com/)
-* Source: [https://github.com/mitchellh/vagrant](https://github.com/mitchellh/vagrant)
+* Source: [https://github.com/hashicorp/vagrant](https://github.com/hashicorp/vagrant)
 * [![Gitter chat](https://badges.gitter.im/mitchellh/vagrant.png)](https://gitter.im/mitchellh/vagrant)
 * Mailing list: [Google Groups](https://groups.google.com/group/vagrant-up)
 
@@ -21,7 +21,7 @@ between Windows, Mac OS X, and Linux.
 For the quick-start, we'll bring up a development machine on
 [VirtualBox](https://www.virtualbox.org/) because it is free and works
 on all major platforms. Vagrant can, however, work with almost any
-system such as [OpenStack] (https://www.openstack.org/), [VMware] (https://www.vmware.com/), [Docker] (https://docs.docker.com/), etc.
+system such as [OpenStack](https://www.openstack.org/), [VMware](https://www.vmware.com/), [Docker](https://docs.docker.com/), etc.
 
 First, make sure your development machine has
 [VirtualBox](https://www.virtualbox.org/)
@@ -49,7 +49,7 @@ and you're welcome to give it a shot. Please review the installation page [here]
 
 ## Contributing to Vagrant
 
-To install Vagrant from source, please [follow the guide in the Wiki](https://github.com/mitchellh/vagrant/wiki/Installing-Vagrant-from-Source).
+To install Vagrant from source, please [follow the guide in the Wiki](https://github.com/hashicorp/vagrant/wiki/Installing-Vagrant-from-Source).
 
 You can run the test suite with:
 

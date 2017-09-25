@@ -23,6 +23,7 @@ describe "templates/guests/debian/network_dhcp" do
     it "renders the template" do
       result = Vagrant::Util::TemplateRenderer.render(template, options: {
         device: "eth1",
+        root_device: "eth0",
         use_dhcp_assigned_default_route: true,
       })
       expect(result).to eq <<-EOH.gsub(/^ {8}/, "")

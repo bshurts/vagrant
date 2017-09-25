@@ -16,7 +16,7 @@ describe VagrantPlugins::CommandInit::Command do
   let(:vagrantfile_path) { File.join(env.cwd, "Vagrantfile") }
 
   before do
-    Vagrant.plugin("2").manager.stub(commands: {})
+    allow(Vagrant.plugin("2").manager).to receive(:commands).and_return({})
   end
 
   after do
@@ -73,6 +73,13 @@ describe VagrantPlugins::CommandInit::Command do
 
     it "creates a Vagrantfile with a box and box version" do
       described_class.new(["--box-version", "1.2.3", "hashicorp/precise64"], env).execute
+      contents = File.read(vagrantfile_path)
+      expect(contents).to match(/config.vm.box = "hashicorp\/precise64"/)
+      expect(contents).to match(/config.vm.box_version = "1.2.3"/)
+    end
+
+    it "creates a minimal Vagrantfile with a box and box version" do
+      described_class.new(["--minimal", "--box-version", "1.2.3", "hashicorp/precise64"], env).execute
       contents = File.read(vagrantfile_path)
       expect(contents).to match(/config.vm.box = "hashicorp\/precise64"/)
       expect(contents).to match(/config.vm.box_version = "1.2.3"/)

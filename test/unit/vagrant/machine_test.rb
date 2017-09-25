@@ -12,7 +12,7 @@ describe Vagrant::Machine do
   let(:provider) { new_provider_mock }
   let(:provider_cls) do
     obj = double("provider_cls")
-    obj.stub(new: provider)
+    allow(obj).to receive(:new).and_return(provider)
     obj
   end
   let(:provider_config) { Object.new }
@@ -21,9 +21,9 @@ describe Vagrant::Machine do
   let(:base)     { false }
   let(:box) do
     double("box").tap do |b|
-      b.stub(name: "foo")
-      b.stub(provider: :dummy)
-      b.stub(version: "1.0")
+      allow(b).to receive(:name).and_return("foo")
+      allow(b).to receive(:provider).and_return(:dummy)
+      allow(b).to receive(:version).and_return("1.0")
     end
   end
 
@@ -50,8 +50,8 @@ describe Vagrant::Machine do
 
   def new_provider_mock
     double("provider").tap do |obj|
-      obj.stub(_initialize: nil)
-      obj.stub(machine_id_changed: nil)
+      allow(obj).to receive(:_initialize).and_return(nil)
+      allow(obj).to receive(:machine_id_changed).and_return(nil)
       allow(obj).to receive(:state).and_return(Vagrant::MachineState.new(
         :created, "", ""))
     end
@@ -81,7 +81,7 @@ describe Vagrant::Machine do
 
       it "should not insert key" do
         subject = new_instance
-        expect(subject.config.ssh.insert_key).to be_false
+        expect(subject.config.ssh.insert_key).to be(false)
       end
     end
 
@@ -197,7 +197,7 @@ describe Vagrant::Machine do
 
       it "should initialize the capabilities" do
         instance = new_provider_mock
-        expect(instance).to receive(:_initialize).with { |p, m|
+        expect(instance).to receive(:_initialize).with(any_args) { |p, m|
           expect(p).to eq(provider_name)
           expect(m.name).to eq(name)
           true
@@ -307,6 +307,67 @@ describe Vagrant::Machine do
       expect { instance.action(action_name) }.
         to raise_error(Vagrant::Errors::UnimplementedProviderAction)
     end
+
+    it 'should not warn if the machines cwd has not changed' do
+      initial_action_name  = :up
+      second_action_name  = :reload
+      callable     = lambda { |_env| }
+      original_cwd = env.cwd.to_s
+
+      allow(provider).to receive(:action).with(initial_action_name).and_return(callable)
+      allow(provider).to receive(:action).with(second_action_name).and_return(callable)
+      allow(subject.ui).to receive(:warn)
+
+      instance.action(initial_action_name)
+      expect(subject.ui).to_not have_received(:warn)
+
+      instance.action(second_action_name)
+      expect(subject.ui).to_not have_received(:warn)
+    end
+
+    it 'should warn if the machine was last run under a different directory' do
+      action_name  = :up
+      callable     = lambda { |_env| }
+      original_cwd = env.cwd.to_s
+
+      allow(provider).to receive(:action).with(action_name).and_return(callable)
+      allow(subject.ui).to receive(:warn)
+
+      instance.action(action_name)
+
+      expect(subject.ui).to_not have_received(:warn)
+
+      # Whenever the machine is run on a different directory, the user is warned
+      allow(env).to receive(:root_path).and_return('/a/new/path')
+      instance.action(action_name)
+
+      expect(subject.ui).to have_received(:warn) do |warn_msg|
+        expect(warn_msg).to include(original_cwd)
+        expect(warn_msg).to include('/a/new/path')
+      end
+    end
+
+    context "if in a subdir" do
+      let (:data_dir) { env.cwd }
+
+      it 'should not warn if vagrant is run in subdirectory' do
+        action_name  = :up
+        callable     = lambda { |_env| }
+        original_cwd = env.cwd.to_s
+
+        allow(provider).to receive(:action).with(action_name).and_return(callable)
+        allow(subject.ui).to receive(:warn)
+
+        instance.action(action_name)
+
+        expect(subject.ui).to_not have_received(:warn)
+        # mock out cwd to be subdir and ensure no warn is printed
+        allow(env).to receive(:cwd).and_return("#{original_cwd}/a/new/path")
+
+        instance.action(action_name)
+        expect(subject.ui).to_not have_received(:warn)
+      end
+    end
   end
 
   describe "#action_raw" do
@@ -322,7 +383,7 @@ describe Vagrant::Machine do
     it "should run the callable with the proper env" do
       subject.action_raw(:foo, callable)
 
-      expect(@env[:called]).to be_true
+      expect(@env[:called]).to be(true)
       expect(@env[:action_name]).to eq(:machine_action_foo)
       expect(@env[:machine]).to equal(subject)
       expect(@env[:machine_action]).to eq(:foo)
@@ -337,7 +398,7 @@ describe Vagrant::Machine do
     it "should merge in any extra env" do
       subject.action_raw(:bar, callable, foo: :bar)
 
-      expect(@env[:called]).to be_true
+      expect(@env[:called]).to be(true)
       expect(@env[:foo]).to eq(:bar)
     end
   end
@@ -472,9 +533,9 @@ describe Vagrant::Machine do
 
       # Setup the box information
       box = double("box")
-      box.stub(name: "foo")
-      box.stub(provider: :bar)
-      box.stub(version: "1.2.3")
+      allow(box).to receive(:name).and_return("foo")
+      allow(box).to receive(:provider).and_return(:bar)
+      allow(box).to receive(:version).and_return("1.2.3")
       subject.box = box
 
       subject.id = "foo"
@@ -727,18 +788,29 @@ describe Vagrant::Machine do
 
       context "with custom ssh_info" do
         it "keys_only should be default" do
-          expect(instance.ssh_info[:keys_only]).to be_true
+          expect(instance.ssh_info[:keys_only]).to be(true)
         end
         it "paranoid should be default" do
-          expect(instance.ssh_info[:paranoid]).to be_false
+          expect(instance.ssh_info[:paranoid]).to be(false)
+        end
+        it "extra_args should be nil" do
+          expect(instance.ssh_info[:extra_args]).to be(nil)
+        end
+        it "extra_args should be set" do
+          instance.config.ssh.extra_args = ["-L", "127.1.2.7:8008:127.1.2.7:8008"]
+          expect(instance.ssh_info[:extra_args]).to eq(["-L", "127.1.2.7:8008:127.1.2.7:8008"])
+        end
+        it "extra_args should be set as an array" do
+          instance.config.ssh.extra_args = "-6"
+          expect(instance.ssh_info[:extra_args]).to eq("-6")
         end
         it "keys_only should be overridden" do
           instance.config.ssh.keys_only = false
-          expect(instance.ssh_info[:keys_only]).to be_false
+          expect(instance.ssh_info[:keys_only]).to be(false)
         end
         it "paranoid should be overridden" do
           instance.config.ssh.paranoid = true
-          expect(instance.ssh_info[:paranoid]).to be_true
+          expect(instance.ssh_info[:paranoid]).to be(true)
         end
       end
     end

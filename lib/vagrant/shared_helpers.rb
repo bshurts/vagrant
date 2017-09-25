@@ -5,12 +5,18 @@ require "thread"
 module Vagrant
   @@global_lock = Mutex.new
 
-  # This is the default endpoint of the Atlas in
+  # This is the default endpoint of the Vagrant Cloud in
   # use. API calls will be made to this for various functions
   # of Vagrant that may require remote access.
   #
   # @return [String]
-  DEFAULT_SERVER_URL = "https://atlas.hashicorp.com"
+  DEFAULT_SERVER_URL = "https://vagrantcloud.com"
+
+  # Max number of seconds to wait for joining an active thread.
+  #
+  # @return [Integer]
+  # @note This is not the maxium time for a thread to complete.
+  THREAD_MAX_JOIN_TIMEOUT = 60
 
   # This holds a global lock for the duration of the block. This should
   # be invoked around anything that is modifying process state (such as
@@ -101,5 +107,26 @@ module Vagrant
     path ||= "~/.vagrant.d"
 
     Pathname.new(path).expand_path
+  end
+
+  # This returns true/false if the running version of Vagrant is
+  # a pre-release version (development)
+  #
+  # @return [Boolean]
+  def self.prerelease?
+    Gem::Version.new(Vagrant::VERSION).prerelease?
+  end
+
+  # This allows control over dependency resolution when installing
+  # plugins into vagrant. When true, dependency libraries that Vagrant
+  # core relies upon will be hard constraints.
+  #
+  # @return [Boolean]
+  def self.strict_dependency_enforcement
+    if ENV["VAGRANT_DISABLE_STRICT_DEPENDENCY_ENFORCEMENT"]
+      false
+    else
+      true
+    end
   end
 end

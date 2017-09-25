@@ -20,7 +20,7 @@ defaults are typically fine, but you can fine tune whatever you would like.
 
 `config.ssh.username` - This sets the username that Vagrant will SSH
 as by default. Providers are free to override this if they detect a more
-appropriate user. By default this is "vagrant," since that is what most
+appropriate user. By default this is "vagrant", since that is what most
 public boxes are made as.
 
 <hr>
@@ -63,7 +63,7 @@ the machine, but replace it with perhaps a more secure key later.
 <hr>
 
 `config.ssh.keys_only` - Only use Vagrant-provided SSH private keys (do not use
-any keys stored in ssh-agent). The default value is `true`.`
+any keys stored in ssh-agent). The default value is `true`.
 
 <hr>
 
@@ -149,3 +149,18 @@ config.ssh.export_command_template = 'export %ENV_KEY%="%ENV_VALUE%"'
 `config.ssh.sudo_command` - The command to use when executing a command
 with `sudo`. This defaults to `sudo -E -H %c`. The `%c` will be replaced by
 the command that is being executed.
+
+`config.ssh.compression` - If `false`, this setting will not include the
+compression setting when ssh'ing into a machine. If this is not set, it will
+default to `true` and `Compression=yes` will be enabled with ssh.
+
+`config.ssh.dsa_authentication` - If `false`, this setting  will not include
+`DSAAuthentication` when ssh'ing into a machine. If this is not set, it will
+default to `true` and `DSAAuthentication=yes` will be used with ssh.
+
+`config.ssh.extra_args` - This settings value is passed directly into the
+ssh executable. This allows you to pass any arbitrary commands to do things such
+as reverse tunneling down into the ssh program. These options can either be
+single flags set as strings such as `"-6"` for IPV6 or an array of arguments
+such as `["-L", "8008:localhost:80"]` for enabling a tunnel from host port 8008
+to port 80 on guest.

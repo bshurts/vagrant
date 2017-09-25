@@ -28,7 +28,7 @@ module Vagrant
       def self.check_key_permissions(key_path)
         # Don't do anything if we're on Windows, since Windows doesn't worry
         # about key permissions.
-        return if Platform.windows?
+        return if Platform.windows? || Platform.wsl_windows_access_bypass?(key_path)
 
         LOGGER.debug("Checking key permissions: #{key_path}")
         stat = key_path.stat
@@ -107,9 +107,15 @@ module Vagrant
         # Command line options
         command_options = [
           "-p", options[:port].to_s,
-          "-o", "Compression=yes",
-          "-o", "DSAAuthentication=yes",
           "-o", "LogLevel=#{log_level}"]
+
+        if ssh_info[:compression]
+          command_options += ["-o", "Compression=yes"]
+        end
+
+        if ssh_info[:dsa_authentication]
+          command_options += ["-o", "DSAAuthentication=yes"]
+        end
 
         # Solaris/OpenSolaris/Illumos uses SunSSH which doesn't support the
         # IdentitiesOnly option. Also, we don't enable it in plain mode or if
@@ -129,7 +135,12 @@ module Vagrant
         # If we're not in plain mode and :private_key_path is set attach the private key path(s).
         if !plain_mode && options[:private_key_path]
           options[:private_key_path].each do |path|
-            command_options += ["-i", path.to_s]
+
+            # Use '-o' instead of '-i' because '-i' does not call
+            # percent_expand in misc.c, but '-o' does. when passing the path,
+            # replace '%' in the path with '%%' to escape the '%'
+            path = path.to_s.gsub('%', '%%')
+            command_options += ["-o", "IdentityFile=\"#{path}\""]
           end
         end
 
@@ -157,6 +168,12 @@ module Vagrant
         #
         # Without having extra_args be last, the user loses this ability
         command_options += ["-o", "ForwardAgent=yes"] if ssh_info[:forward_agent]
+
+        # Note about :extra_args
+        #   ssh_info[:extra_args] comes from a machines ssh config in a Vagrantfile,
+        #   where as opts[:extra_args] comes from running the ssh command
+        command_options += Array(ssh_info[:extra_args]) if ssh_info[:extra_args]
+
         command_options.concat(opts[:extra_args]) if opts[:extra_args]
 
         # Build up the host string for connecting
